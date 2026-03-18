@@ -9,11 +9,11 @@ import torch
 import torchvision.transforms.v2.functional as F
 from class_registry import ClassRegistry
 from einops import rearrange
+from olmo_core.config import Config
 from torch.distributions import Beta
 
-from olmoearth_pretrain.config import Config
 from olmoearth_pretrain.data.constants import Modality
-from olmoearth_pretrain.datatypes import OlmoEarthSample
+from olmoearth_pretrain.data.dataset import OlmoEarthSample
 from olmoearth_pretrain.types import ArrayTensor
 
 
@@ -95,7 +95,7 @@ class FlipAndRotateSpace(Transform):
         # Choose a random transformation
         transformation = random.choice(self.transformations)
         new_data_dict: dict[str, ArrayTensor] = {}
-        for attribute, modality_data in batch.as_dict().items():
+        for attribute, modality_data in batch.as_dict(ignore_nones=True).items():
             if attribute == "timestamps":
                 new_data_dict[attribute] = modality_data
             else:

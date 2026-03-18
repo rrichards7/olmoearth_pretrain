@@ -51,9 +51,9 @@ def get_sample_data_for_histogram(
         get_item_args = GetItemArgs(idx=i, patch_size=1, sampled_hw_p=IMAGE_TILE_SIZE)
         _, sample = dataset[get_item_args]
         for modality in sample.modalities:
-            if modality == "latlon":
+            if modality == "timestamps" or modality == "latlon":
                 continue
-            modality_data = sample.as_dict()[modality]
+            modality_data = sample.as_dict(ignore_nones=True)[modality]
             if modality_data is None:
                 continue
             modality_spec = Modality.get(modality)

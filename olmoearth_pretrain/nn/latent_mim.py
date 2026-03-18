@@ -7,6 +7,7 @@ from typing import Any
 
 import torch
 import torch.nn as nn
+from olmo_core.config import Config
 from torch.distributed import DeviceMesh
 from torch.distributed.fsdp import (
     MixedPrecisionPolicy,
@@ -14,10 +15,9 @@ from torch.distributed.fsdp import (
     register_fsdp_forward_method,
 )
 
-from olmoearth_pretrain.config import Config
-from olmoearth_pretrain.datatypes import MaskedOlmoEarthSample
 from olmoearth_pretrain.nn.flexi_vit import TokensAndMasks
 from olmoearth_pretrain.nn.utils import DistributedMixins, unpack_encoder_output
+from olmoearth_pretrain.train.masking import MaskedOlmoEarthSample
 
 logger = logging.getLogger(__name__)
 
@@ -47,9 +47,6 @@ class LatentMIM(nn.Module, DistributedMixins):
         self.target_encoder = deepcopy(self.encoder)
         for p in self.target_encoder.parameters():
             p.requires_grad = False
-        # Disable band dropout on target encoder so it always sees full spectral info.
-        if hasattr(self.target_encoder, "disable_band_dropout"):
-            self.target_encoder.disable_band_dropout()
 
     def forward(
         self, x: MaskedOlmoEarthSample, patch_size: int

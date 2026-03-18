@@ -1,9 +1,5 @@
 """Load the OlmoEarth models from Hugging Face.
 
-This module works with or without olmo-core installed:
-- Without olmo-core: inference-only mode (loading pre-trained models)
-- With olmo-core: full functionality including training
-
 The weights are converted to pth file from distributed checkpoint like this:
 
     import json
@@ -26,16 +22,14 @@ The weights are converted to pth file from distributed checkpoint like this:
     torch.save(model.state_dict(), "OlmoEarth-v1-Nano.pth")
 """
 
-import copy
 import json
 from enum import StrEnum
 from os import PathLike
 
 import torch
 from huggingface_hub import hf_hub_download
+from olmo_core.config import Config
 from upath import UPath
-
-from olmoearth_pretrain.config import Config
 
 CONFIG_FILENAME = "config.json"
 WEIGHTS_FILENAME = "weights.pth"
@@ -70,6 +64,7 @@ def load_model_from_id(model_id: ModelID, load_weights: bool = True) -> torch.nn
         return model
 
     state_dict_fpath = _resolve_artifact_path(model_id, WEIGHTS_FILENAME)
+
     state_dict = _load_state_dict(state_dict_fpath)
     model.load_state_dict(state_dict)
     return model
@@ -109,26 +104,11 @@ def _resolve_artifact_path(
     return base / filename
 
 
-def patch_legacy_encoder_config(config_dict: dict) -> dict:
-    """Patch checkpoint config dicts that predate use_linear_patch_embed.
-
-    Old checkpoints used Conv2d for patch projection and have no use_linear_patch_embed
-    key. Without this patch they would incorrectly default to True (Linear) and fail
-    to load. Call this on the raw config dict before passing to Config.from_dict.
-    """
-    enc = config_dict.get("model", {}).get("encoder_config", {})
-    if isinstance(enc, dict) and "use_linear_patch_embed" not in enc:
-        config_dict = copy.deepcopy(config_dict)
-        config_dict["model"]["encoder_config"]["use_linear_patch_embed"] = False
-    return config_dict
-
-
 def _load_model_from_config(path: UPath) -> torch.nn.Module:
     """Load the model config from the specified path."""
     with path.open() as f:
         config_dict = json.load(f)
-    config_dict = patch_legacy_encoder_config(config_dict)
-    model_config = Config.from_dict(config_dict["model"])
+        model_config = Config.from_dict(config_dict["model"])
     return model_config.build()
 
 

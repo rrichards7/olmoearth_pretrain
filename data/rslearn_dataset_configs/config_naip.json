@@ -13,19 +13,17 @@
         }
       ],
       "data_source": {
-        "class_path": "rslearn.data_sources.planetary_computer.PlanetaryComputer",
+        "asset_bands": {
+          "image": [
+            "R",
+            "G",
+            "B",
+            "IR"
+          ]
+        },
+        "collection_name": "naip",
         "ingest": false,
-        "init_args": {
-          "asset_bands": {
-            "image": [
-              "R",
-              "G",
-              "B",
-              "IR"
-            ]
-          },
-          "collection_name": "naip"
-        }
+        "name": "rslearn.data_sources.planetary_computer.PlanetaryComputer"
       },
       "type": "raster"
     }

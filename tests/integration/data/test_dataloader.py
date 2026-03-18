@@ -1,20 +1,21 @@
 """Test the OlmoEarthDataLoader class."""
 
-import functools
 from pathlib import Path
 
 import numpy as np
 import pytest
 
-from olmoearth_pretrain.data.collate import collate_single_masked_batched
 from olmoearth_pretrain.data.concat import OlmoEarthConcatDatasetConfig
 from olmoearth_pretrain.data.constants import Modality
 from olmoearth_pretrain.data.dataloader import (
     OlmoEarthDataLoader,
     OlmoEarthDataLoaderConfig,
 )
-from olmoearth_pretrain.data.dataset import OlmoEarthDataset, OlmoEarthDatasetConfig
-from olmoearth_pretrain.train.masking import MaskingConfig
+from olmoearth_pretrain.data.dataset import (
+    OlmoEarthDataset,
+    OlmoEarthDatasetConfig,
+    collate_olmoearth_pretrain,
+)
 
 
 def test_helios_dataloader(tmp_path: Path, setup_h5py_dir: Path) -> None:
@@ -43,10 +44,8 @@ def test_helios_dataloader(tmp_path: Path, setup_h5py_dir: Path) -> None:
         min_patch_size=1,
         max_patch_size=1,
         sampled_hw_p_list=[6],
-        num_masked_views=1,
-        masking_config=MaskingConfig(strategy_config={"type": "random"}),
     )
-    dataloader = dataloader_config.build(dataset)
+    dataloader = dataloader_config.build(dataset, collate_olmoearth_pretrain)
     dataloader.reshuffle()
     batches_processed = 0
     for batch in dataloader:
@@ -92,10 +91,8 @@ def test_helios_dataloader_dataset_percentage(
         min_patch_size=1,
         max_patch_size=1,
         sampled_hw_p_list=[6],
-        num_masked_views=1,
-        masking_config=MaskingConfig(strategy_config={"type": "random"}),
     )
-    dataloader = dataloader_config.build(dataset)
+    dataloader = dataloader_config.build(dataset, collate_olmoearth_pretrain)
     len_dataloader = len(dataloader)
     assert len_dataloader == 10
 
@@ -129,17 +126,13 @@ def test_helios_dataloader_dataset_percentage_bigger_world_size(
     len_dataset = len(dataset)
     assert len_dataset == 50
     assert isinstance(dataset, OlmoEarthDataset)
-    masking_strategy = MaskingConfig(strategy_config={"type": "random"}).build()
-    collator = functools.partial(
-        collate_single_masked_batched, transform=None, masking_strategy=masking_strategy
-    )
     dataloader = OlmoEarthDataLoader(
         dataset=dataset,
         work_dir=str(tmp_path),
         global_batch_size=16,
         dp_world_size=dp_world_size,
         dp_rank=0,
-        collator=collator,
+        collator=collate_olmoearth_pretrain,
         seed=0,
         shuffle=True,
         num_workers=0,
@@ -149,8 +142,6 @@ def test_helios_dataloader_dataset_percentage_bigger_world_size(
         max_patch_size=1,
         sampled_hw_p_list=[6],
         fs_local_rank=0,
-        masking_strategy=masking_strategy,
-        num_masked_views=1,
     )
     len_dataloader = len(dataloader)
     assert len_dataloader == 3
@@ -196,10 +187,8 @@ def test_dataset_percentage_consistent_across_epochs(
             min_patch_size=1,
             max_patch_size=1,
             sampled_hw_p_list=[6],
-            num_masked_views=1,
-            masking_config=MaskingConfig(strategy_config={"type": "random"}),
         )
-        dataloader = dataloader_config.build(dataset)
+        dataloader = dataloader_config.build(dataset, collate_olmoearth_pretrain)
         return dataset, dataloader
 
     dataset1, dataloader1 = make_dataset_and_dataloader(tmp_path / "epoch1")
@@ -257,10 +246,8 @@ def test_concat_dataset_percentage_filtering(
         min_patch_size=1,
         max_patch_size=1,
         sampled_hw_p_list=[6],
-        num_masked_views=1,
-        masking_config=MaskingConfig(strategy_config={"type": "random"}),
     )
-    dataloader = dataloader_config.build(concat_dataset)
+    dataloader = dataloader_config.build(concat_dataset, collate_olmoearth_pretrain)
 
     dataloader.reshuffle(epoch=1)
 

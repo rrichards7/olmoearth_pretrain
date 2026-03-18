@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import cast
 
 import numpy as np
-from olmo_core.config import StrEnum
+from olmo_core.config import Config, StrEnum
 from olmo_core.distributed.utils import get_local_rank
 from olmo_core.launch.beaker import BeakerLaunchConfig, ExperimentSpec
 from olmo_core.train import (
@@ -19,11 +19,11 @@ from olmo_core.train.callbacks import ConfigSaverCallback, WandBCallback
 from olmo_core.utils import get_default_device, prepare_cli_environment, seed_all
 
 from olmoearth_pretrain._compat import deprecated_class_alias as _deprecated_class_alias
-from olmoearth_pretrain.config import Config
 from olmoearth_pretrain.data.constants import Modality
 from olmoearth_pretrain.data.dataloader import OlmoEarthDataLoaderConfig
 from olmoearth_pretrain.data.dataset import (
     OlmoEarthDatasetConfig,
+    collate_olmoearth_pretrain,
 )
 from olmoearth_pretrain.data.visualize import visualize_sample
 from olmoearth_pretrain.inference_benchmarking.run_throughput_benchmark import (
@@ -33,7 +33,6 @@ from olmoearth_pretrain.internal.utils import (
     MockLatentMIMTrainModule,
     MockOlmoEarthDataLoader,
 )
-from olmoearth_pretrain.nn.tokenization import TokenizationConfig
 from olmoearth_pretrain.train.train_module.train_module import (
     OlmoEarthTrainModuleConfig,
 )
@@ -73,28 +72,19 @@ HeliosBeakerLaunchConfig = _deprecated_class_alias(
 
 @dataclass
 class CommonComponents(Config):
-    """Any configurable items that are common to all experiments.
-
-    Args:
-        run_name: Name of the experiment run.
-        save_folder: Path to save checkpoints and logs.
-        training_modalities: List of modality names to train on.
-        launch: Optional Beaker launch configuration.
-        nccl_debug: Whether to enable NCCL debugging.
-        tokenization_config: Optional custom tokenization config for band groupings.
-            If provided, will be used by both the model and masking strategy to ensure
-            consistent band groupings.
-    """
+    """Any configurable items that are common to all experiments."""
 
     run_name: str
     save_folder: str
     training_modalities: list[str]
     launch: OlmoEarthBeakerLaunchConfig | None = None
     nccl_debug: bool = False
-    tokenization_config: TokenizationConfig | None = None
+    # callbacks: dict[str, Callback]
 
     def validate(self) -> None:
         """Validate the common components."""
+        self.training_modalities.append('planet_scope')
+
         if not isinstance(self.training_modalities, list):
             raise ValueError("training_modalities must be a list")
         if not all(
@@ -103,8 +93,6 @@ class CommonComponents(Config):
             raise ValueError(
                 "training_modalities must contain only valid modality names"
             )
-        if self.tokenization_config is not None:
-            self.tokenization_config.validate()
 
 
 @dataclass
@@ -152,7 +140,6 @@ class OlmoEarthEvaluateConfig(Config):
     model: Config
     trainer: TrainerConfig
     launch: OlmoEarthBeakerLaunchConfig | None = None
-    train_module: OlmoEarthTrainModuleConfig | None = None
     init_seed: int = 12536
 
 
@@ -161,7 +148,6 @@ class BenchmarkExperimentConfig(Config):
     """Configuration for a throughput benchmarking run."""
 
     benchmark: ThroughputBenchmarkRunnerConfig
-    model: Config | None = None
     launch: OlmoEarthBeakerLaunchConfig | None = None
 
 
@@ -227,9 +213,6 @@ def build_evaluate_config(
     model_config_builder: Callable[[CommonComponents], Config],
     trainer_config_builder: Callable[[CommonComponents], TrainerConfig],
     overrides: list[str],
-    train_module_config_builder: (
-        Callable[[CommonComponents], OlmoEarthTrainModuleConfig] | None
-    ) = None,
 ) -> OlmoEarthEvaluateConfig:
     """Build a OlmoEarth Evaluate experiment configuration."""
     common_overrides, overrides = split_common_overrides(overrides)
@@ -238,15 +221,11 @@ def build_evaluate_config(
     logger.info("Common: %s", common)
     model_config = model_config_builder(common)
     trainer_config = trainer_config_builder(common)
-    train_module_config = (
-        train_module_config_builder(common) if train_module_config_builder else None
-    )
     config = OlmoEarthEvaluateConfig(
         run_name=common.run_name,
         model=model_config,
         trainer=trainer_config,
         launch=common.launch,
-        train_module=train_module_config,
     )
     config = config.merge(overrides)
     return config
@@ -255,23 +234,15 @@ def build_evaluate_config(
 def build_benchmark_config(
     common: CommonComponents,
     inference_benchmarking_config_builder: Callable[
-        [CommonComponents], ThroughputBenchmarkRunnerConfig
+        [], ThroughputBenchmarkRunnerConfig
     ],
     overrides: list[str],
-    benchmark_model_config_builder: Callable[[CommonComponents], Config] | None = None,
 ) -> BenchmarkExperimentConfig:
     """Build a throughput benchmarking configuration."""
-    inference_benchmarking_config = inference_benchmarking_config_builder(common)
-
-    # Build model config if builder is provided
-    model_config = None
-    if benchmark_model_config_builder is not None:
-        model_config = benchmark_model_config_builder(common)
-
+    inference_benchmarking_config = inference_benchmarking_config_builder()
     config = BenchmarkExperimentConfig(
         launch=common.launch,
         benchmark=inference_benchmarking_config,
-        model=model_config,
     )
     config = config.merge(overrides)
     logger.info("Benchmark config: %s", config)
@@ -280,7 +251,7 @@ def build_benchmark_config(
 
 def benchmark(config: BenchmarkExperimentConfig) -> None:
     """Benchmark an experiment."""
-    runner = config.benchmark.build(model_config=config.model)
+    runner = config.benchmark.build()
     runner.run()
 
 
@@ -302,8 +273,10 @@ def train(config: OlmoEarthExperimentConfig) -> None:
     model = model.to(device)
     train_module = config.train_module.build(model)
     dataset = config.dataset.build()
+    # TODO: akward harcoding of the collator here
     data_loader = config.data_loader.build(
         dataset,
+        collator=collate_olmoearth_pretrain,
         dp_process_group=train_module.dp_process_group,
     )
     trainer = config.trainer.build(train_module, data_loader)
@@ -315,7 +288,7 @@ def train(config: OlmoEarthExperimentConfig) -> None:
     trainer.fit()
 
 
-def evaluate(config: OlmoEarthEvaluateConfig) -> None:
+def evaluate(config: OlmoEarthExperimentConfig) -> None:
     """Evaluate a checkpoint or model on downstream tasks."""
     # Set RNG states on all devices. Also, done in prepare_training_environment
     seed_all(config.init_seed)
@@ -326,18 +299,7 @@ def evaluate(config: OlmoEarthEvaluateConfig) -> None:
     device = get_default_device()
     model = model.to(device)
     data_loader = MockOlmoEarthDataLoader()
-
-    # Handle case where we're loading OlmoEarth distributed checkpoint for eval
-    if config.trainer.load_path is not None:
-        if config.train_module is None:
-            raise ValueError("train_module is not set so we can't load the checkpoint")
-        train_module = config.train_module.build(model)
-        # Hack to satisfy init of a real train module
-        data_loader.min_patch_size = model.encoder.min_patch_size
-        data_loader.max_patch_size = model.encoder.max_patch_size
-    else:
-        train_module = MockLatentMIMTrainModule()
-
+    train_module = MockLatentMIMTrainModule()
     train_module.model = model
     trainer = config.trainer.build(train_module, data_loader)
     # Record the config to W&B/Comet and each checkpoint dir.
@@ -355,7 +317,9 @@ def visualize(config: OlmoEarthExperimentConfig) -> None:
     global_step = config.visualize.global_step
     dataset = config.dataset.build()
     if global_step is not None:
-        data_loader = config.data_loader.build(dataset, dp_process_group=None)
+        data_loader = config.data_loader.build(
+            dataset, collator=collate_olmoearth_pretrain, dp_process_group=None
+        )
         sample_indices = data_loader.fast_forward(global_step)
     else:
         sample_indices = np.random.randint(
@@ -380,7 +344,10 @@ def launch(config: OlmoEarthExperimentConfig) -> None:
 def prep(config: OlmoEarthExperimentConfig) -> None:
     """Prepare the dataset for an experiment."""
     dataset = config.dataset.build()
-    data_loader = config.data_loader.build(dataset, dp_process_group=None)
+    # TODO: akward harcoding of the collator here
+    data_loader = config.data_loader.build(
+        dataset, collator=collate_olmoearth_pretrain, dp_process_group=None
+    )
     data_loader.reshuffle(epoch=1)
     # Also may want to create the first index of shuffling here for starters
 
@@ -508,9 +475,8 @@ def main(
         Callable[[CommonComponents], OlmoEarthVisualizeConfig] | None
     ) = None,
     inference_benchmarking_config_builder: (
-        Callable[[CommonComponents], ThroughputBenchmarkRunnerConfig] | None
+        Callable[[], ThroughputBenchmarkRunnerConfig] | None
     ) = None,
-    benchmark_model_config_builder: Callable[[CommonComponents], Config] | None = None,
 ) -> None:
     """Main entry point for OlmoEarth Pretrain experiments.
 
@@ -556,7 +522,6 @@ If running command on a local machine ie from a session, you can use the [b]loca
             common=common,
             inference_benchmarking_config_builder=inference_benchmarking_config_builder,
             overrides=overrides,
-            benchmark_model_config_builder=benchmark_model_config_builder,
         )
     elif (
         cmd == SubCmd.evaluate
@@ -571,7 +536,6 @@ If running command on a local machine ie from a session, you can use the [b]loca
             model_config_builder=model_config_builder,
             trainer_config_builder=trainer_config_builder,
             overrides=overrides,
-            train_module_config_builder=train_module_config_builder,
         )
     else:
         # Training mode

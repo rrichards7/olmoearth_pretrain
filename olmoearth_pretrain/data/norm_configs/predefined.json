@@ -7,14 +7,6 @@
       "var": 2500
     }
   },
-  "eurocrops": {
-    "B1": {
-      "count": 100,
-      "mean": 150,
-      "std": 150,
-      "var": 22500
-    }
-  },
   "gse": {
     "A00": {
       "count": 100,
@@ -425,12 +417,6 @@
       "min": -1
     }
   },
-  "ndvi": {
-    "ndvi": {
-      "max": 1,
-      "min": -1
-    }
-  },
   "openstreetmap_raster": {
     "aerialway_pylon": {
       "max": 1,
@@ -613,6 +599,24 @@
       "min": 0
     },
     "B8A": {
+      "max": 10000,
+      "min": 0
+    }
+  },
+  "ps2_sd": {
+    "b01": {
+      "max": 10000,
+      "min": 0
+    },
+    "b02": {
+      "max": 10000,
+      "min": 0
+    },
+    "b03": {
+      "max": 10000,
+      "min": 0
+    },
+    "b04": {
       "max": 10000,
       "min": 0
     }

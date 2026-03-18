@@ -258,6 +258,29 @@ class Modality:
         ignore_when_parsing=False,
     )
 
+    PS2_SD = ModalitySpec(
+        name="ps2_sd",
+        tile_resolution_factor=16,
+        band_sets=[
+            # 3 m/pixel bands.
+            BandSet(["b01", "b02", "b03", "b04"], 16),
+        ],
+        is_multitemporal=True,
+        ignore_when_parsing=False,
+    )
+
+    PSB_SD = ModalitySpec(
+        name="psb_sd",
+        tile_resolution_factor=16,
+        band_sets=[
+            # 3 m/pixel bands.
+            BandSet(["b01", "b02", "b03", "b04", 
+                     "b05", "b06", "b07", "b08"], 16),
+        ],
+        is_multitemporal=True,
+        ignore_when_parsing=False,
+    )
+
     LANDSAT = ModalitySpec(
         name="landsat",
         tile_resolution_factor=16,
@@ -485,22 +508,6 @@ class Modality:
         ignore_when_parsing=False,
     )
 
-    NDVI = ModalitySpec(
-        name="ndvi",
-        tile_resolution_factor=16,
-        band_sets=[BandSet(["ndvi"], 16)],
-        is_multitemporal=True,
-        ignore_when_parsing=True,  # computed from S2 L2A, not loaded from file
-    )
-
-    EUROCROPS = ModalitySpec(
-        name="eurocrops",
-        tile_resolution_factor=16,
-        band_sets=[BandSet(["B1"], 16)],
-        is_multitemporal=False,
-        ignore_when_parsing=False,
-    )
-
     @classmethod
     def get(self, name: str) -> ModalitySpec:
         """Get the ModalitySpec with the specified name."""
@@ -528,8 +535,3 @@ class Modality:
 # Latlon and timestamps
 LATLON = ["lat", "lon"]
 TIMESTAMPS = ["day", "month", "year"]
-
-
-def get_modality_specs_from_names(names: list[str]) -> list[ModalitySpec]:
-    """Get the modality specs from the names."""
-    return [Modality.get(name) for name in names]

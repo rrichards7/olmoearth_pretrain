@@ -35,11 +35,11 @@ from olmoearth_pretrain.internal.experiment import (
 from olmoearth_pretrain.internal.utils import MODEL_SIZE_ARGS
 from olmoearth_pretrain.nn.flexi_vit import (
     EncoderConfig,
+    PoolingType,
     PredictorConfig,
     ReconstructorConfig,
 )
 from olmoearth_pretrain.nn.mae import MAEConfig
-from olmoearth_pretrain.nn.pooling import PoolingType
 from olmoearth_pretrain.train.callbacks import (
     DownstreamEvaluatorCallbackConfig,
     OlmoEarthSpeedMonitorCallback,
@@ -56,26 +56,6 @@ logger = logging.getLogger(__name__)
 
 MAX_PATCH_SIZE = 8
 MIN_PATCH_SIZE = 1
-
-
-def get_masking_config() -> MaskingConfig:
-    """Get the masking configuration for the experiment."""
-    return MaskingConfig(
-        strategy_config={
-            "type": "modality_cross_random",
-            "encode_ratio": 0.5,
-            "decode_ratio": 0.5,
-            "allow_encoding_decoding_same_bandset": True,
-            "only_decode_modalities": [
-                "worldcover",
-                "srtm",
-                "openstreetmap_raster",
-                "wri_canopy_height_map",
-                "cdl",
-                "worldcereal",
-            ],
-        }
-    )
 
 
 def my_build_common_components(
@@ -115,7 +95,6 @@ def build_model_config(common: CommonComponents) -> MAEConfig:
         max_patch_size=MAX_PATCH_SIZE,
         drop_path=0.1,
         max_sequence_length=12,
-        use_linear_patch_embed=False,
     )
     decoder_config = PredictorConfig(
         encoder_embedding_size=model_size["encoder_embedding_size"],
@@ -144,7 +123,22 @@ def build_train_module_config(
     return MAETrainModuleConfig(
         optim_config=AdamWConfig(lr=0.0001, weight_decay=0.02, fused=False),
         rank_microbatch_size=32,
-        masking_config=get_masking_config(),
+        masking_config=MaskingConfig(
+            strategy_config={
+                "type": "modality_cross_random",
+                "encode_ratio": 0.5,
+                "decode_ratio": 0.5,
+                "allow_encoding_decoding_same_bandset": True,
+                "only_decode_modalities": [
+                    "worldcover",
+                    "srtm",
+                    "openstreetmap_raster",
+                    "wri_canopy_height_map",
+                    "cdl",
+                    "worldcereal",
+                ],
+            }
+        ),
         mae_loss_config=LossConfig(
             loss_config={"type": "mae", "loss_function": "SmoothL1Loss", "beta": 0.1}
         ),
@@ -163,6 +157,8 @@ def build_train_module_config(
 
 def build_dataloader_config(common: CommonComponents) -> OlmoEarthDataLoaderConfig:
     """Build the dataloader config for an experiment."""
+    # things should be set during building
+
     return OlmoEarthDataLoaderConfig(
         num_workers=16,
         global_batch_size=512,
@@ -173,8 +169,6 @@ def build_dataloader_config(common: CommonComponents) -> OlmoEarthDataLoaderConf
         max_patch_size=MAX_PATCH_SIZE,
         work_dir=common.save_folder,
         seed=3622,
-        num_masked_views=1,  # MAE only needs 1 view (no contrastive)
-        masking_config=get_masking_config(),
     )
 
 

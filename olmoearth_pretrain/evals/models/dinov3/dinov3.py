@@ -7,12 +7,12 @@ from dataclasses import dataclass
 
 import torch
 from einops import rearrange
+from olmo_core.config import Config
 from torch import nn
 from torchvision import transforms
 
-from olmoearth_pretrain.config import Config
 from olmoearth_pretrain.data.constants import Modality
-from olmoearth_pretrain.nn.pooling import PoolingType
+from olmoearth_pretrain.nn.flexi_vit import PoolingType
 from olmoearth_pretrain.train.masking import MaskedOlmoEarthSample
 
 from .constants import MODEL_TO_TORCHHUB_ID_AND_WEIGHTS_URL, REPO_DIR, DinoV3Models

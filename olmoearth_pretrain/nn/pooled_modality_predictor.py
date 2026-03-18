@@ -12,7 +12,6 @@ from einops import rearrange
 from torch import Tensor
 
 from olmoearth_pretrain.data.constants import BASE_GSD, Modality
-from olmoearth_pretrain.datatypes import MaskedOlmoEarthSample, MaskValue
 from olmoearth_pretrain.decorators import experimental
 from olmoearth_pretrain.nn.attention import Mlp
 from olmoearth_pretrain.nn.flexi_vit import (
@@ -25,6 +24,7 @@ from olmoearth_pretrain.nn.flexi_vit import (
     return_modalities_from_dict,
 )
 from olmoearth_pretrain.nn.utils import get_cumulative_sequence_lengths
+from olmoearth_pretrain.train.masking import MaskedOlmoEarthSample, MaskValue
 
 logger = logging.getLogger(__name__)
 
@@ -596,8 +596,7 @@ class EncodeEarlyAttnPool(Encoder):
         token_norm_stats = None
         if self.has_register_tokens and register_tokens is not None:
             tokens, register_tokens = self.pop_register_tokens(tokens)
-            if self.log_token_norm_stats:
-                token_norm_stats = self.get_token_norm_stats(tokens, register_tokens)
+            token_norm_stats = self.get_token_norm_stats(tokens, register_tokens)
 
         if exit_ids_seq is not None:
             # this should only ever be called by the target encoder,
@@ -857,7 +856,7 @@ class PooledModalityPredictor(PredictorBase):
         pooled_tokens_and_masks["modality_pooled_tokens"] = pooled_tokens
 
         # Prepare the Learnable Masked Outputs on the original Unpooled Tokens
-        decoder_emedded_dict = x.as_dict()
+        decoder_emedded_dict = x.as_dict(return_none=False)
         tokens_only_dict = self.add_masks(decoder_emedded_dict)
         decoder_emedded_dict.update(tokens_only_dict)
         tokens_and_masks = self.apply_attn(
@@ -883,8 +882,8 @@ class PooledModalityPredictor(PredictorBase):
             per_modality_output_tokens = []
             modality_data = tokens_and_masks[modality]
 
-            num_band_sets = self.tokenization_config.get_num_bandsets(modality)
-            for idx in range(num_band_sets):
+            band_sets = Modality.get(modality).band_sets
+            for idx in range(len(band_sets)):
                 per_channel_modality_data = modality_data[..., idx, :]
                 output_data = self.to_output_embed(self.norm(per_channel_modality_data))
                 per_modality_output_tokens.append(output_data)

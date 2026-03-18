@@ -124,9 +124,7 @@ def normalize_bands(
     stds: np.ndarray,
     mins: np.ndarray | None = None,
     maxs: np.ndarray | None = None,
-    # Default to 2std no clip - this matches what our model sees in pretraining,
-    # so when using dataset stats (e.g. for MADOS) consistency is important.
-    method: str = NormMethod.NORM_NO_CLIP_2_STD,
+    method: str = NormMethod.NORM_NO_CLIP,
 ) -> np.ndarray:
     """Normalize an image with given statistics using the specified method."""
     if isinstance(method, str):

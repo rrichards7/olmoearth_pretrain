@@ -208,9 +208,7 @@ class MADOSDataset(Dataset):
         split: str,
         partition: str,
         norm_stats_from_pretrained: bool = False,
-        # Default to 2std no clip - this matches what our model sees in pretraining,
-        # so when using dataset stats (e.g. for MADOS) consistency is important.
-        norm_method: str = "norm_no_clip_2_std",
+        norm_method: str = "norm_no_clip",
     ):
         """Init MADOS dataset.
 

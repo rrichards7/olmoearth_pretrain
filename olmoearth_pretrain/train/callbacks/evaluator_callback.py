@@ -15,7 +15,7 @@ import torch
 from olmo_core.train.callbacks.callback import Callback, CallbackConfig
 from olmo_core.train.common import Duration
 from olmo_core.train.trainer import Trainer
-from torch.utils.data import DataLoader, IterableDataset
+from torch.utils.data import DataLoader
 
 from olmoearth_pretrain.data.constants import Modality
 from olmoearth_pretrain.evals.datasets import (
@@ -29,18 +29,13 @@ from olmoearth_pretrain.evals.datasets.configs import (
     get_eval_mode,
 )
 from olmoearth_pretrain.evals.datasets.normalize import NormMethod
-from olmoearth_pretrain.evals.datasets.utils import eval_collate_fn_variable_time
-from olmoearth_pretrain.evals.embedding_transforms import (
-    dequantize_embeddings,
-    reduce_embedding_dim,
-)
+from olmoearth_pretrain.evals.datasets.utils import eval_collate_fn
 from olmoearth_pretrain.evals.embeddings import get_embeddings
 from olmoearth_pretrain.evals.eval_wrapper import get_eval_wrapper
 from olmoearth_pretrain.evals.finetune import run_finetune_eval
 from olmoearth_pretrain.evals.knn import run_knn
 from olmoearth_pretrain.evals.linear_probe import ProbeType, train_and_eval_probe
-from olmoearth_pretrain.evals.metrics import EvalMetric, EvalResult, EvalTaskResult
-from olmoearth_pretrain.nn.pooling import PoolingType
+from olmoearth_pretrain.nn.flexi_vit import PoolingType
 from olmoearth_pretrain.train.callbacks.wandb import OlmoEarthWandBCallback
 
 logger = logging.getLogger(__name__)
@@ -93,25 +88,8 @@ class DownstreamTaskConfig:
     probe_type: ProbeType = ProbeType.LINEAR
     use_pooled_tokens: bool = False
     partition: str = field(default_factory=lambda: EvalDatasetPartition.TRAIN1X)
-    # Default to 2std no clip - this matches what our model sees in pretraining,
-    # so when using dataset stats (e.g. for MADOS) consistency is important.
-    norm_method: NormMethod = field(
-        default_factory=lambda: NormMethod.NORM_NO_CLIP_2_STD
-    )
-    select_best_by_primary_metric: bool = False
-    # Subsample train embeddings for faster probe training (None = use all)
-    max_train_samples: int | None = None
-    # Quantize embeddings to int8 for storage efficiency evaluation
-    quantize_embeddings: bool = False
-    # Reduce embedding dimensionality via PCA (None = no reduction)
-    embedding_dim: int | None = None
-    # Use weighted dice loss instead of cross-entropy (only for specific tasks like wildfire)
-    use_dice_loss: bool = False
-    # Override the default primary metric (e.g. EvalMetric.F1 instead of ACCURACY).
-    # None = use the default for the task type (accuracy for classification, miou for segmentation).
-    primary_metric: EvalMetric | None = None
-    # Class index for CLASS_F1 primary metric. Required when primary_metric is CLASS_F1.
-    primary_metric_class: int | None = None
+    norm_method: NormMethod = field(default_factory=lambda: NormMethod.NORM_NO_CLIP)
+    select_final_test_miou_based_on_epoch_of_max_val_miou: bool = False
 
 
 class DownstreamEvaluator:
@@ -150,6 +128,7 @@ class DownstreamEvaluator:
         self.pooling_type = task.pooling_type
         self.norm_stats_from_pretrained = task.norm_stats_from_pretrained
         self.input_modalities = task.input_modalities
+        self.input_layers = task.input_layers
         self.probe_lr = task.probe_lr
         self.probe_batch_size = task.probe_batch_size
         self.ft_lr = task.ft_lr
@@ -158,25 +137,22 @@ class DownstreamEvaluator:
         self.epochs = task.epochs
         self.linear_probe_eval_interval = task.linear_probe_eval_interval
         self.patch_size = task.patch_size
-        self.max_train_samples = task.max_train_samples
         self.eval_interval = task.eval_interval
         self.eval_mode = task.eval_mode
         self.probe_type = task.probe_type
         self.partition = task.partition
         self.norm_method = task.norm_method
         self.use_pooled_tokens = task.use_pooled_tokens
-        self.select_best_by_primary_metric = task.select_best_by_primary_metric
-        self.quantize_embeddings = task.quantize_embeddings
-        self.embedding_dim = task.embedding_dim
-        self.use_dice_loss = task.use_dice_loss
-        self.primary_metric = task.primary_metric
-        self.primary_metric_class = task.primary_metric_class
+        self.select_final_test_miou_based_on_epoch_of_max_val_miou = (
+            task.select_final_test_miou_based_on_epoch_of_max_val_miou
+        )
         self.run_on_test = run_on_test
         self.n_bootstrap = n_bootstrap
         self.bootstrap_seed = bootstrap_seed
-        if self.select_best_by_primary_metric:
+        if self.select_final_test_miou_based_on_epoch_of_max_val_miou:
             assert self.run_on_test, (
-                "if select_best_by_primary_metric is True, run_on_test must be True"
+                "if select_final_test_miou_based_on_epoch_of_max_val_miou is True, "
+                "run_on_test must be True"
             )
         if self.eval_mode is None:
             self.eval_mode = get_eval_mode(self.config.task_type)  # type: ignore
@@ -195,9 +171,7 @@ class DownstreamEvaluator:
                         "config.height_width cannot be none for segmentation tasks."
                     )
                 if self.config.height_width % self.patch_size != 0:
-                    raise ValueError(
-                        f"Image height / width indivisable by patch size. {self.config.height_width} % {self.patch_size} != 0"
-                    )
+                    raise ValueError("Image height / width indivisable by patch size.")
 
         if self.eval_mode == EvalMode.FINETUNE:
             if self.ft_lr is None:
@@ -213,22 +187,18 @@ class DownstreamEvaluator:
         self.eval_function = (
             partial(
                 run_knn,
-                primary_metric=self.primary_metric,
-                primary_metric_class=self.primary_metric_class,
             )
             if self.eval_mode == EvalMode.KNN
             else (
                 partial(
+                    # TODO: THis is updated dynamically in the get_embeddings function
                     train_and_eval_probe,
                     batch_size=self.probe_batch_size,
                     epochs=self.epochs,
                     eval_interval=self.linear_probe_eval_interval,
                     probe_type=self.probe_type,
                     lr=self.probe_lr,
-                    select_best_by_primary_metric=self.select_best_by_primary_metric,
-                    use_dice_loss=self.use_dice_loss,
-                    primary_metric=self.primary_metric,
-                    primary_metric_class=self.primary_metric_class,
+                    select_final_test_miou_based_on_epoch_of_max_val_miou=self.select_final_test_miou_based_on_epoch_of_max_val_miou,
                 )
                 if self.eval_mode == EvalMode.LINEAR_PROBE
                 else None
@@ -252,23 +222,22 @@ class DownstreamEvaluator:
             generator.manual_seed(split_seed)
             worker_init_fn = partial(_seed_worker, base_seed=split_seed)
 
-        eval_ds = get_eval_dataset(
-            eval_dataset=self.dataset,
-            split=split,
-            partition=self.partition,
-            norm_stats_from_pretrained=self.norm_stats_from_pretrained,
-            input_modalities=self.input_modalities,
-            norm_method=self.norm_method,
-        )
-        is_iterable = isinstance(eval_ds, IterableDataset)
         return DataLoader(
-            eval_ds,
-            collate_fn=eval_collate_fn_variable_time,
+            get_eval_dataset(
+                eval_dataset=self.dataset,
+                split=split,
+                partition=self.partition,
+                norm_stats_from_pretrained=self.norm_stats_from_pretrained,
+                input_modalities=self.input_modalities,
+                input_layers=self.input_layers,
+                norm_method=self.norm_method,
+            ),
+            collate_fn=eval_collate_fn,
             batch_size=batch_size,
             num_workers=self.num_workers,
-            generator=None if is_iterable else generator,
+            generator=generator,
             worker_init_fn=worker_init_fn,
-            shuffle=False if is_iterable else (split == "train"),
+            shuffle=(split == "train"),  # Only shuffle train data
         )
 
     def _get_embeddings(
@@ -303,59 +272,26 @@ class DownstreamEvaluator:
             "use_pooled_tokens": self.use_pooled_tokens,
         }
         model = get_eval_wrapper(model, **wrapper_kwargs)
-        return get_embeddings(
-            data_loader=data_loader,
-            model=model,
-            is_train=is_train,
-            quantize=self.quantize_embeddings,
-        )
+        return get_embeddings(data_loader=data_loader, model=model, is_train=is_train)
 
-    def _val_embed_probe(self) -> EvalTaskResult:
+    def _val_embed_probe(self) -> dict[str, float | dict]:
         """Validate the model using embeddings and probe (knn or linear probe)."""
         logger.info(f"Validating {self.dataset} with {self.eval_mode}")
-        logger.info(f"Getting train loader for {self.dataset}...")
         train_loader = self._get_data_loader("train", self.embedding_batch_size)
-        logger.info(f"Getting val loader for {self.dataset}...")
         val_loader = self._get_data_loader("valid", self.embedding_batch_size)
+        test_loader = self._get_data_loader("test", self.embedding_batch_size)
 
         start_time = time.time()
         logger.info(f"Getting train embeddings for {self.dataset}...")
         train_embeddings, train_labels = self._get_embeddings(
             train_loader, is_train=True
         )
-        logger.info(f"Train embeddings shape: {train_embeddings.shape}")
-        logger.info(
-            f"Train label counts: {torch.unique(train_labels, return_counts=True)}"
-        )
-
-        # Subsample train embeddings if configured
-        if (
-            self.max_train_samples
-            and train_embeddings.shape[0] > self.max_train_samples
-        ):
-            logger.info(
-                f"Subsampling train embeddings from {train_embeddings.shape[0]} to {self.max_train_samples}"
-            )
-            indices = torch.randperm(train_embeddings.shape[0])[
-                : self.max_train_samples
-            ]
-            train_embeddings = train_embeddings[indices]
-            train_labels = train_labels[indices]
-
         logger.info(f"Getting val embeddings for {self.dataset}...")
         val_embeddings, val_labels = self._get_embeddings(val_loader, is_train=False)
-        logger.info(f"Val embeddings shape: {val_embeddings.shape}")
-        logger.info(f"Val label counts: {torch.unique(val_labels, return_counts=True)}")
         if self.run_on_test:
-            logger.info(f"Getting test loader for {self.dataset}...")
-            test_loader = self._get_data_loader("test", self.embedding_batch_size)
             logger.info(f"Getting test embeddings for {self.dataset}...")
             test_embeddings, test_labels = self._get_embeddings(
                 test_loader, is_train=False
-            )
-            logger.info(f"Test embeddings shape: {test_embeddings.shape}")
-            logger.info(
-                f"Test label counts: {torch.unique(test_labels, return_counts=True)}"
             )
         else:
             test_embeddings, test_labels = None, None
@@ -376,30 +312,6 @@ class DownstreamEvaluator:
         if test_labels is not None:
             logger.info(f"test labels shape for {self.dataset}: {test_labels.shape}")
 
-        # Dequantize if embeddings were quantized
-        if self.quantize_embeddings:
-            logger.info(f"Dequantizing embeddings for {self.dataset}")
-            train_embeddings = dequantize_embeddings(train_embeddings)
-            val_embeddings = dequantize_embeddings(val_embeddings)
-            if test_embeddings is not None:
-                test_embeddings = dequantize_embeddings(test_embeddings)
-
-        # Reduce embedding dimensionality via PCA if specified
-        if self.embedding_dim is not None:
-            original_dim = train_embeddings.shape[-1]
-            logger.info(
-                f"Reducing embeddings from {original_dim} to {self.embedding_dim} dims for {self.dataset}"
-            )
-            train_embeddings, val_embeddings, test_embeddings, variance_retained = (
-                reduce_embedding_dim(
-                    train_embeddings,
-                    val_embeddings,
-                    test_embeddings,
-                    self.embedding_dim,
-                )
-            )
-            logger.info(f"PCA variance retained: {variance_retained:.4f}")
-
         kwargs = {
             "config": self.config,
             "train_embeddings": train_embeddings,
@@ -416,7 +328,6 @@ class DownstreamEvaluator:
 
         # Free memory aggressively between evals
         del train_embeddings, train_labels, test_embeddings, test_labels
-        del val_embeddings, val_labels
         torch.cuda.empty_cache()
         gc.collect()
 
@@ -432,17 +343,7 @@ class DownstreamEvaluator:
         )
         return best_checkpoint_path
 
-    def _get_resume_checkpoint_path(self) -> str:
-        """Get the resume checkpoint path for resumable training."""
-        resume_checkpoint_path = os.path.join(
-            self.trainer.save_folder,
-            self.evaluation_name,
-            f"lr{self.ft_lr}",
-            "last.ckpt",
-        )
-        return resume_checkpoint_path
-
-    def _val_finetune(self) -> EvalTaskResult:
+    def _val_finetune(self) -> dict[str, Any]:
         """Validate the model using finetuning."""
         logger.info(f"Validating {self.dataset} with finetune")
 
@@ -482,93 +383,52 @@ class DownstreamEvaluator:
 
         # Skip task if best checkpoint already exists
         best_checkpoint_path = self._get_best_checkpoint_path()
-        resume_checkpoint_path = self._get_resume_checkpoint_path()
         if os.path.exists(best_checkpoint_path):
-            logger.info(
-                f"Best checkpoint for {self.evaluation_name} already exists, "
-                f"skipping finetuning and evaluating on the best checkpoint..."
-            )
-
-        if os.path.exists(resume_checkpoint_path):
-            logger.info(
-                f"Found resume checkpoint at {resume_checkpoint_path}, will resume training"
-            )
+            logger.info("Best checkpoint already exists, skipping finetuning")
+            return {"val_score": 0.0, "test_score": 0.0, "bootstrap_stats": {}}
         else:
-            logger.info("No resume checkpoint found, starting fresh")
+            logger.info("Best checkpoint does not exist, running finetuning")
+            result = run_finetune_eval(
+                task_name=self.evaluation_name,
+                task_config=self.config,
+                trainer=self.trainer,
+                model=model,
+                device=self.device or self.trainer.device,
+                lr=self.ft_lr,  # type: ignore
+                epochs=self.epochs,
+                patch_size=self.patch_size,
+                pooling_type=self.pooling_type,
+                use_pooled_tokens=self.use_pooled_tokens,
+                train_loader=train_loader,
+                val_loader=val_loader,
+                test_loader=test_loader,
+                seed=self.finetune_seed,
+                best_checkpoint_path=best_checkpoint_path,
+            )
+            logger.info(
+                f"Downstream evaluator {self.evaluation_name} val score: {result['val_score']}, test score: {result['test_score']}"
+            )
+            model.load_state_dict(original_state)
 
-        result = run_finetune_eval(
-            task_name=self.evaluation_name,
-            task_config=self.config,
-            trainer=self.trainer,
-            model=model,
-            device=self.device or self.trainer.device,
-            lr=self.ft_lr,  # type: ignore
-            epochs=self.epochs,
-            patch_size=self.patch_size,
-            pooling_type=self.pooling_type,
-            use_pooled_tokens=self.use_pooled_tokens,
-            train_loader=train_loader,
-            val_loader=val_loader,
-            test_loader=test_loader,
-            seed=self.finetune_seed,
-            best_checkpoint_path=best_checkpoint_path,
-            resume_checkpoint_path=resume_checkpoint_path,
-            primary_metric=self.primary_metric,
-            primary_metric_class=self.primary_metric_class,
-        )
-        logger.info(
-            f"Downstream evaluator {self.evaluation_name} val score: {result.val_result}, test score: {result.test_result}"
-        )
-        model.load_state_dict(original_state)
-        del original_state
+            torch.cuda.empty_cache()
+            gc.collect()
+            return result
 
-        torch.cuda.empty_cache()
-        gc.collect()
-        return result
+    def val(self) -> dict[str, Any]:
+        """Validate the model on the downstream task.
 
-    def val(self) -> EvalTaskResult:
-        """Validate the model on the downstream task."""
+        Returns:
+            Dictionary with keys:
+                - val_score: Validation score
+                - test_score: Test score
+                - bootstrap_stats: Bootstrap statistics dict (empty dict if not available)
+        """
         if self.eval_mode in (EvalMode.KNN, EvalMode.LINEAR_PROBE):
             return self._val_embed_probe()
         elif self.eval_mode == EvalMode.FINETUNE:
             return self._val_finetune()
         else:
             raise ValueError(f"Unsupported eval_mode: {self.eval_mode}")
-
-
-def _make_other_prefix(prefix: str) -> str:
-    """Turn 'eval' -> 'eval_other', 'eval/test' -> 'eval_other/test'."""
-    parts = prefix.split("/", 1)
-    parts[0] = parts[0] + "_other"
-    return "/".join(parts)
-
-
-def _log_eval_result_to_wandb(
-    wandb_callback: Any, prefix: str, name: str, result: EvalResult
-) -> None:
-    """Log an EvalResult to wandb.
-
-    Primary metric goes to {prefix}/{name} (e.g. eval/m_eurosat).
-    Non-primary metrics go to eval_other/.../{name}/{metric_name}.
-    """
-    other_prefix = _make_other_prefix(prefix)
-    wandb_callback.wandb.log({f"{prefix}/{name}": result.primary})
-    for metric_name, metric_value in result.metrics.items():
-        if metric_name == result.primary_metric_key:
-            continue
-        wandb_callback.wandb.log({f"{other_prefix}/{name}/{metric_name}": metric_value})
-
-
-def _record_eval_result(
-    trainer: Trainer, prefix: str, name: str, result: EvalResult
-) -> None:
-    """Record an EvalResult to trainer metrics."""
-    other_prefix = _make_other_prefix(prefix)
-    trainer.record_metric(f"{prefix}/{name}", result.primary)
-    for metric_name, metric_value in result.metrics.items():
-        if metric_name == result.primary_metric_key:
-            continue
-        trainer.record_metric(f"{other_prefix}/{name}/{metric_name}", metric_value)
 
 
 @dataclass
@@ -635,12 +495,13 @@ class DownstreamEvaluatorCallback(Callback):
         return required_modalities_present and has_timeseries
 
     def _log_eval_results_to_logger_pretrain(
-        self, evaluator: DownstreamEvaluator, result: EvalTaskResult
+        self, evaluator: DownstreamEvaluator, result: dict[str, Any]
     ) -> None:
         """Log the evaluation results."""
-        val_result = result.val_result
-        test_result = result.test_result
-        bootstrap_stats = result.bootstrap_stats
+        # Extract from dict
+        val_result = result["val_score"]
+        test_result = result["test_score"]
+        bootstrap_stats = result["bootstrap_stats"]
 
         # Log bootstrap statistics if available
         if bootstrap_stats:
@@ -652,35 +513,32 @@ class DownstreamEvaluatorCallback(Callback):
                 f"{bootstrap_stats.get('ci_upper', 'N/A'):.4f}]"
             )
 
-        if val_result is not None:
+        logger.info(
+            f"Downstream evaluator {evaluator.evaluation_name} score: {val_result}"
+        )
+        if self.run_on_test:
             logger.info(
-                f"Downstream evaluator {evaluator.evaluation_name} score: {val_result.primary} (metrics: {val_result.metrics})"
-            )
-        if self.run_on_test and test_result is not None:
-            logger.info(
-                f"Downstream evaluator {evaluator.evaluation_name} test score: {test_result.primary} (metrics: {test_result.metrics})"
+                f"Downstream evaluator {evaluator.evaluation_name} test score: {test_result}"
             )
 
     def _log_eval_results_to_wandb_pretrain(
-        self, evaluator: DownstreamEvaluator, result: EvalTaskResult
+        self, evaluator: DownstreamEvaluator, result: dict[str, Any]
     ) -> None:
         """Log the evaluation results to wandb."""
+        # self.trainer.record_metric() is not logging to wandb at this point
+        # therefore we log to wandb manually
         wandb_callback = next(
             callback
             for callback in self.trainer._iter_callbacks()
             if isinstance(callback, OlmoEarthWandBCallback)
         )
-        val_result = result.val_result
-        test_result = result.test_result
-        eval_time = result.eval_time
-        bootstrap_stats = result.bootstrap_stats
+        val_result = result["val_score"]
+        test_result = result["test_score"]
+        eval_time = result["eval_time"]
+        bootstrap_stats = result["bootstrap_stats"]
 
         if wandb_callback.enabled:
-            # Log validation results
-            if val_result is not None:
-                _log_eval_result_to_wandb(
-                    wandb_callback, "eval", evaluator.evaluation_name, val_result
-                )
+            wandb_callback.wandb.log({"eval/" + evaluator.evaluation_name: val_result})
             wandb_callback.wandb.log(
                 {"eval_time/" + evaluator.evaluation_name: eval_time}
             )
@@ -694,12 +552,8 @@ class DownstreamEvaluatorCallback(Callback):
                 )
                 wandb_callback.wandb.log({f"{evaluator.evaluation_name}_step": 0})
 
-        # Check if results are valid
-        val_valid = val_result is not None and val_result.primary >= 0
-        test_valid = test_result is not None and test_result.primary >= 0
-
         # Only logging valid results to wandb
-        if wandb_callback.enabled and val_valid and test_valid:
+        if val_result > 0 and test_result > 0:
             # Log bootstrap statistics if available
             if bootstrap_stats:
                 wandb_callback.wandb.log(
@@ -718,9 +572,9 @@ class DownstreamEvaluatorCallback(Callback):
                         ),
                     }
                 )
-            if self.run_on_test and test_result is not None:
-                _log_eval_result_to_wandb(
-                    wandb_callback, "eval/test", evaluator.evaluation_name, test_result
+            if self.run_on_test:
+                wandb_callback.wandb.log(
+                    {"eval/test/" + evaluator.evaluation_name: test_result}
                 )
 
     def pre_train(self) -> None:
@@ -764,28 +618,28 @@ class DownstreamEvaluatorCallback(Callback):
                 continue
             self._perform_eval(evaluator)
 
-    def _perform_eval(self, evaluator: DownstreamEvaluator) -> EvalTaskResult:
-        """Run the evaluator."""
-        logger.info(f"Running {evaluator.evaluation_name} evaluations...")
+    def _perform_eval(self, evaluator: DownstreamEvaluator) -> dict[str, float | dict]:
+        """Run the evaluator.
 
+        Returns:
+            Dictionary with keys:
+                - val_score: Validation score
+                - test_score: Test score
+                - eval_time: Evaluation time in seconds
+                - bootstrap_stats: Bootstrap statistics dict (empty dict if not available)
+        """
+        logger.info(f"Running {evaluator.evaluation_name} evaluations...")
         start_time = time.monotonic()
         result = evaluator.val()
+        val_result = result["val_score"]
+        test_result = result["test_score"]
+        bootstrap_stats = result["bootstrap_stats"]
 
-        val_result = result.val_result
-        test_result = result.test_result
-        bootstrap_stats = result.bootstrap_stats
-
-        # Record validation metrics
-        if val_result is not None:
-            _record_eval_result(
-                self.trainer, "eval", evaluator.evaluation_name, val_result
+        self.trainer.record_metric(f"eval/{evaluator.evaluation_name}", val_result)
+        if self.run_on_test:
+            self.trainer.record_metric(
+                f"eval/test/{evaluator.evaluation_name}", test_result
             )
-
-        if self.run_on_test and test_result is not None:
-            _record_eval_result(
-                self.trainer, "eval/test", evaluator.evaluation_name, test_result
-            )
-
         # Log bootstrap statistics if available
         if bootstrap_stats:
             self.trainer.record_metric(
@@ -809,8 +663,7 @@ class DownstreamEvaluatorCallback(Callback):
         logger.info(
             f"Finished {evaluator.evaluation_name} evaluations in {eval_time:.1f} seconds."
         )
-
-        result.eval_time = eval_time
+        result["eval_time"] = eval_time
         return result
 
 
@@ -838,6 +691,13 @@ class DownstreamEvaluatorCallbackConfig(CallbackConfig):
         self, task: DownstreamTaskConfig, config: EvalDatasetConfig
     ) -> None:
         """Verify the input modality configuration for a task."""
+        # Check that input_modalities is only set for multimodal tasks
+        if (task.dataset not in ["pastis", "pastis128", "nandi", "awf"]) and len(
+            task.input_modalities
+        ) > 0:
+            raise ValueError(
+                f"input_modalities is only supported for multimodal tasks, got {task.dataset}"
+            )
         # Make sure input_modalities contains only unique modalities
         if len(task.input_modalities) != len(set(task.input_modalities)):
             raise ValueError(
@@ -847,6 +707,21 @@ class DownstreamEvaluatorCallbackConfig(CallbackConfig):
             raise ValueError(
                 f"input_modalities must be a subset of supported_modalities, got {task.input_modalities} and {config.supported_modalities}"
             )
+
+    def verify_input_layers(self, task: DownstreamTaskConfig) -> None:
+        """Check input_layers config."""
+        rslearn_datasets = {"nandi", "awf"}
+        layers = task.input_layers or []
+
+        # input_layers not allowed on non-rslearn datasets
+        if task.dataset not in rslearn_datasets and layers:
+            raise ValueError(
+                f"`input_layers` not supported for dataset '{task.dataset}'."
+            )
+
+        # input_layers must be unique
+        if len(layers) != len(set(layers)):
+            raise ValueError(f"`input_layers` must be unique, got {layers}")
 
     def build(self, trainer: Trainer) -> Callback | None:
         """Build the downstream evaluator callback."""
@@ -883,6 +758,7 @@ class DownstreamEvaluatorCallbackConfig(CallbackConfig):
             self.verify_input_modalities(task, config)
             # Sort to ensure consistent order
             task.input_modalities.sort()
+            self.verify_input_layers(task)
             logger.info(f"Adding {evaluation_name} with eval mode {task.eval_mode}")
             evaluators.append(
                 DownstreamEvaluator(

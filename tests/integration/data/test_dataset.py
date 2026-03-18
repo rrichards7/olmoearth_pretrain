@@ -11,7 +11,6 @@ from olmoearth_pretrain.data.dataset import (
     GetItemArgs,
     OlmoEarthDataset,
     OlmoEarthSample,
-    subset_sample_default,
 )
 
 logger = logging.getLogger(__name__)
@@ -230,8 +229,7 @@ class TestOlmoEarthDataset:
         )
         # Everything is filled to 12 here always so we never run into the too long issue before
         # We just pick the lowest that is correct and then repad to the correct length
-        subset_sample = subset_sample_default(
-            sample,
+        subset_sample = sample.subset_default(
             patch_size=args.patch_size,
             max_tokens_per_instance=args.token_budget,
             sampled_hw_p=args.sampled_hw_p,

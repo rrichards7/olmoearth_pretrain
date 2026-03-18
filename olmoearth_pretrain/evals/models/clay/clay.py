@@ -9,11 +9,11 @@ import torch.nn.functional as F
 import yaml
 from claymodel.module import ClayMAEModule
 from einops import rearrange
+from olmo_core.config import Config
 from torch import nn
 
-from olmoearth_pretrain.config import Config
 from olmoearth_pretrain.data.constants import Modality
-from olmoearth_pretrain.nn.pooling import PoolingType
+from olmoearth_pretrain.nn.flexi_vit import PoolingType
 from olmoearth_pretrain.train.masking import MaskedOlmoEarthSample
 
 logger = logging.getLogger(__name__)

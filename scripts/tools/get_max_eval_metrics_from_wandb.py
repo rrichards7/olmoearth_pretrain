@@ -176,13 +176,15 @@ def get_max_metrics_grouped(
                     if eval_mode is not None
                     else False
                 )
-                is_select_best_by_primary_metric = task_config.get(
-                    "select_best_by_primary_metric",
+                is_select_final_test_miou_based_on_epoch_of_max_val_miou = (
                     task_config.get(
                         "select_final_test_miou_based_on_epoch_of_max_val_miou", False
-                    ),
+                    )
                 )
-                if is_linear_probe_task and not is_select_best_by_primary_metric:
+                if (
+                    is_linear_probe_task
+                    and not is_select_final_test_miou_based_on_epoch_of_max_val_miou
+                ):
                     print(
                         f"Skipping metric {key} for run {run.name} because it is a linear probe task but not done with early stop linear probing"
                     )

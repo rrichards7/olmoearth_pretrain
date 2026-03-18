@@ -7,12 +7,12 @@ from dataclasses import dataclass
 import torch
 import torch.nn.functional as F
 from einops import rearrange
+from olmo_core.config import Config
 from terratorch.registry import BACKBONE_REGISTRY
 from torch import nn
 
-from olmoearth_pretrain.config import Config
 from olmoearth_pretrain.data.constants import Modality
-from olmoearth_pretrain.nn.pooling import PoolingType
+from olmoearth_pretrain.nn.flexi_vit import PoolingType
 from olmoearth_pretrain.train.masking import MaskedOlmoEarthSample
 
 logger = logging.getLogger(__name__)

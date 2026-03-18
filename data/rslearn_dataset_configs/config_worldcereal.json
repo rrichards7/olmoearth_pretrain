@@ -10,10 +10,8 @@
         }
       ],
       "data_source": {
-        "class_path": "rslearn.data_sources.worldcereal.WorldCereal",
-        "init_args": {
-          "worldcereal_dir": "source_data/worldcereal/"
-        }
+        "name": "rslearn.data_sources.worldcereal.WorldCereal",
+        "worldcereal_dir": "source_data/worldcereal/"
       },
       "resampling_method": "nearest",
       "type": "raster"
@@ -28,10 +26,8 @@
         }
       ],
       "data_source": {
-        "class_path": "rslearn.data_sources.worldcereal.WorldCereal",
-        "init_args": {
-          "worldcereal_dir": "source_data/worldcereal/"
-        }
+        "name": "rslearn.data_sources.worldcereal.WorldCereal",
+        "worldcereal_dir": "source_data/worldcereal/"
       },
       "resampling_method": "nearest",
       "type": "raster"
@@ -46,10 +42,8 @@
         }
       ],
       "data_source": {
-        "class_path": "rslearn.data_sources.worldcereal.WorldCereal",
-        "init_args": {
-          "worldcereal_dir": "source_data/worldcereal/"
-        }
+        "name": "rslearn.data_sources.worldcereal.WorldCereal",
+        "worldcereal_dir": "source_data/worldcereal/"
       },
       "resampling_method": "nearest",
       "type": "raster"
@@ -64,10 +58,8 @@
         }
       ],
       "data_source": {
-        "class_path": "rslearn.data_sources.worldcereal.WorldCereal",
-        "init_args": {
-          "worldcereal_dir": "source_data/worldcereal/"
-        }
+        "name": "rslearn.data_sources.worldcereal.WorldCereal",
+        "worldcereal_dir": "source_data/worldcereal/"
       },
       "resampling_method": "nearest",
       "type": "raster"
@@ -82,10 +74,8 @@
         }
       ],
       "data_source": {
-        "class_path": "rslearn.data_sources.worldcereal.WorldCereal",
-        "init_args": {
-          "worldcereal_dir": "source_data/worldcereal/"
-        }
+        "name": "rslearn.data_sources.worldcereal.WorldCereal",
+        "worldcereal_dir": "source_data/worldcereal/"
       },
       "resampling_method": "nearest",
       "type": "raster"
@@ -100,10 +90,8 @@
         }
       ],
       "data_source": {
-        "class_path": "rslearn.data_sources.worldcereal.WorldCereal",
-        "init_args": {
-          "worldcereal_dir": "source_data/worldcereal/"
-        }
+        "name": "rslearn.data_sources.worldcereal.WorldCereal",
+        "worldcereal_dir": "source_data/worldcereal/"
       },
       "resampling_method": "nearest",
       "type": "raster"
@@ -118,10 +106,8 @@
         }
       ],
       "data_source": {
-        "class_path": "rslearn.data_sources.worldcereal.WorldCereal",
-        "init_args": {
-          "worldcereal_dir": "source_data/worldcereal/"
-        }
+        "name": "rslearn.data_sources.worldcereal.WorldCereal",
+        "worldcereal_dir": "source_data/worldcereal/"
       },
       "resampling_method": "nearest",
       "type": "raster"
@@ -136,10 +122,8 @@
         }
       ],
       "data_source": {
-        "class_path": "rslearn.data_sources.worldcereal.WorldCereal",
-        "init_args": {
-          "worldcereal_dir": "source_data/worldcereal/"
-        }
+        "name": "rslearn.data_sources.worldcereal.WorldCereal",
+        "worldcereal_dir": "source_data/worldcereal/"
       },
       "resampling_method": "nearest",
       "type": "raster"

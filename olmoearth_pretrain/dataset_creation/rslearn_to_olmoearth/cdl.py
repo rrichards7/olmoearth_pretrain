@@ -6,7 +6,7 @@ import multiprocessing
 
 import tqdm
 from rslearn.data_sources import Item
-from rslearn.dataset import Dataset, Window
+from rslearn.dataset import Window
 from rslearn.utils.mp import star_imap_unordered
 from upath import UPath
 
@@ -20,13 +20,14 @@ from ..util import get_modality_temp_meta_fname, get_window_metadata
 LAYER_NAME = "cdl"
 
 
-def convert_cdl(window: Window, olmoearth_path: UPath) -> None:
+def convert_cdl(window_path: UPath, olmoearth_path: UPath) -> None:
     """Add CDL crop type data for this window to the OlmoEarth Pretrain dataset.
 
     Args:
-        window: the rslearn window to read data from.
+        window_path: the rslearn window directory to read data from.
         olmoearth_path: OlmoEarth Pretrain dataset path to write to.
     """
+    window = Window.load(window_path)
     window_metadata = get_window_metadata(window)
     layer_datas = window.load_layer_datas()
 
@@ -113,16 +114,14 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    dataset = Dataset(UPath(args.ds_path))
+    ds_path = UPath(args.ds_path)
     olmoearth_path = UPath(args.olmoearth_path)
 
     jobs = []
-    for window in dataset.load_windows(
-        workers=args.workers, show_progress=True, groups=["res_10"]
-    ):
+    for window_dir in (ds_path / "windows" / "res_10").iterdir():
         jobs.append(
             dict(
-                window=window,
+                window_path=window_dir,
                 olmoearth_path=olmoearth_path,
             )
         )

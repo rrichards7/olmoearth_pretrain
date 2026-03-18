@@ -13,11 +13,9 @@
         }
       ],
       "data_source": {
-        "class_path": "rslearn.data_sources.aws_open_data.Naip",
-        "init_args": {
-          "index_cache_dir": "cache/naip",
-          "use_rtree_index": true
-        }
+        "index_cache_dir": "cache/naip",
+        "name": "rslearn.data_sources.aws_open_data.Naip",
+        "use_rtree_index": true
       },
       "type": "raster"
     },
@@ -56,17 +54,15 @@
         }
       ],
       "data_source": {
-        "class_path": "rslearn.data_sources.gcp_public_data.Sentinel2",
-        "init_args": {
-          "harmonize": true,
-          "index_cache_dir": "cache/sentinel2",
-          "modality": "L1C",
-          "use_rtree_index": true
-        },
+        "harmonize": true,
+        "index_cache_dir": "cache/sentinel2",
+        "modality": "L1C",
+        "name": "rslearn.data_sources.gcp_public_data.Sentinel2",
         "query_config": {
           "max_matches": 9999,
           "space_mode": "INTERSECTS"
-        }
+        },
+        "use_rtree_index": true
       },
       "type": "raster"
     }

@@ -21,8 +21,7 @@ from olmoearth_pretrain.evals.models import (
     Terramind,
 )
 from olmoearth_pretrain.evals.models.dinov3.dinov3 import DINOv3, DinoV3Models
-from olmoearth_pretrain.nn.flexi_vit import Encoder
-from olmoearth_pretrain.nn.pooling import PoolingType
+from olmoearth_pretrain.nn.flexi_vit import Encoder, PoolingType
 from olmoearth_pretrain.train.masking import MaskedOlmoEarthSample, MaskValue
 
 

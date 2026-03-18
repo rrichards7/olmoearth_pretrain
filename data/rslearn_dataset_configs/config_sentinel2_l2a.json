@@ -34,17 +34,15 @@
         }
       ],
       "data_source": {
-        "class_path": "rslearn.data_sources.planetary_computer.Sentinel2",
+        "cache_dir": "cache/planetary_computer",
+        "harmonize": true,
         "ingest": false,
-        "init_args": {
-          "cache_dir": "cache/planetary_computer",
-          "harmonize": true,
-          "sort_by": "eo:cloud_cover"
-        },
+        "name": "rslearn.data_sources.planetary_computer.Sentinel2",
         "query_config": {
           "max_matches": 8,
           "space_mode": "INTERSECTS"
-        }
+        },
+        "sort_by": "eo:cloud_cover"
       },
       "type": "raster"
     },
@@ -82,14 +80,12 @@
         }
       ],
       "data_source": {
-        "class_path": "rslearn.data_sources.planetary_computer.Sentinel2",
+        "cache_dir": "cache/planetary_computer",
         "duration": "30d",
+        "harmonize": true,
         "ingest": false,
-        "init_args": {
-          "cache_dir": "cache/planetary_computer",
-          "harmonize": true,
-          "sort_by": "eo:cloud_cover"
-        },
+        "name": "rslearn.data_sources.planetary_computer.Sentinel2",
+        "sort_by": "eo:cloud_cover",
         "time_offset": "-180d"
       },
       "type": "raster"
@@ -128,14 +124,12 @@
         }
       ],
       "data_source": {
-        "class_path": "rslearn.data_sources.planetary_computer.Sentinel2",
+        "cache_dir": "cache/planetary_computer",
         "duration": "30d",
+        "harmonize": true,
         "ingest": false,
-        "init_args": {
-          "cache_dir": "cache/planetary_computer",
-          "harmonize": true,
-          "sort_by": "eo:cloud_cover"
-        },
+        "name": "rslearn.data_sources.planetary_computer.Sentinel2",
+        "sort_by": "eo:cloud_cover",
         "time_offset": "-150d"
       },
       "type": "raster"
@@ -174,14 +168,12 @@
         }
       ],
       "data_source": {
-        "class_path": "rslearn.data_sources.planetary_computer.Sentinel2",
+        "cache_dir": "cache/planetary_computer",
         "duration": "30d",
+        "harmonize": true,
         "ingest": false,
-        "init_args": {
-          "cache_dir": "cache/planetary_computer",
-          "harmonize": true,
-          "sort_by": "eo:cloud_cover"
-        },
+        "name": "rslearn.data_sources.planetary_computer.Sentinel2",
+        "sort_by": "eo:cloud_cover",
         "time_offset": "-120d"
       },
       "type": "raster"
@@ -220,14 +212,12 @@
         }
       ],
       "data_source": {
-        "class_path": "rslearn.data_sources.planetary_computer.Sentinel2",
+        "cache_dir": "cache/planetary_computer",
         "duration": "30d",
+        "harmonize": true,
         "ingest": false,
-        "init_args": {
-          "cache_dir": "cache/planetary_computer",
-          "harmonize": true,
-          "sort_by": "eo:cloud_cover"
-        },
+        "name": "rslearn.data_sources.planetary_computer.Sentinel2",
+        "sort_by": "eo:cloud_cover",
         "time_offset": "-90d"
       },
       "type": "raster"
@@ -266,14 +256,12 @@
         }
       ],
       "data_source": {
-        "class_path": "rslearn.data_sources.planetary_computer.Sentinel2",
+        "cache_dir": "cache/planetary_computer",
         "duration": "30d",
+        "harmonize": true,
         "ingest": false,
-        "init_args": {
-          "cache_dir": "cache/planetary_computer",
-          "harmonize": true,
-          "sort_by": "eo:cloud_cover"
-        },
+        "name": "rslearn.data_sources.planetary_computer.Sentinel2",
+        "sort_by": "eo:cloud_cover",
         "time_offset": "-60d"
       },
       "type": "raster"
@@ -312,14 +300,12 @@
         }
       ],
       "data_source": {
-        "class_path": "rslearn.data_sources.planetary_computer.Sentinel2",
+        "cache_dir": "cache/planetary_computer",
         "duration": "30d",
+        "harmonize": true,
         "ingest": false,
-        "init_args": {
-          "cache_dir": "cache/planetary_computer",
-          "harmonize": true,
-          "sort_by": "eo:cloud_cover"
-        },
+        "name": "rslearn.data_sources.planetary_computer.Sentinel2",
+        "sort_by": "eo:cloud_cover",
         "time_offset": "-30d"
       },
       "type": "raster"
@@ -358,14 +344,12 @@
         }
       ],
       "data_source": {
-        "class_path": "rslearn.data_sources.planetary_computer.Sentinel2",
+        "cache_dir": "cache/planetary_computer",
         "duration": "30d",
+        "harmonize": true,
         "ingest": false,
-        "init_args": {
-          "cache_dir": "cache/planetary_computer",
-          "harmonize": true,
-          "sort_by": "eo:cloud_cover"
-        },
+        "name": "rslearn.data_sources.planetary_computer.Sentinel2",
+        "sort_by": "eo:cloud_cover",
         "time_offset": "0d"
       },
       "type": "raster"
@@ -404,14 +388,12 @@
         }
       ],
       "data_source": {
-        "class_path": "rslearn.data_sources.planetary_computer.Sentinel2",
+        "cache_dir": "cache/planetary_computer",
         "duration": "30d",
+        "harmonize": true,
         "ingest": false,
-        "init_args": {
-          "cache_dir": "cache/planetary_computer",
-          "harmonize": true,
-          "sort_by": "eo:cloud_cover"
-        },
+        "name": "rslearn.data_sources.planetary_computer.Sentinel2",
+        "sort_by": "eo:cloud_cover",
         "time_offset": "30d"
       },
       "type": "raster"
@@ -450,14 +432,12 @@
         }
       ],
       "data_source": {
-        "class_path": "rslearn.data_sources.planetary_computer.Sentinel2",
+        "cache_dir": "cache/planetary_computer",
         "duration": "30d",
+        "harmonize": true,
         "ingest": false,
-        "init_args": {
-          "cache_dir": "cache/planetary_computer",
-          "harmonize": true,
-          "sort_by": "eo:cloud_cover"
-        },
+        "name": "rslearn.data_sources.planetary_computer.Sentinel2",
+        "sort_by": "eo:cloud_cover",
         "time_offset": "60d"
       },
       "type": "raster"
@@ -496,14 +476,12 @@
         }
       ],
       "data_source": {
-        "class_path": "rslearn.data_sources.planetary_computer.Sentinel2",
+        "cache_dir": "cache/planetary_computer",
         "duration": "30d",
+        "harmonize": true,
         "ingest": false,
-        "init_args": {
-          "cache_dir": "cache/planetary_computer",
-          "harmonize": true,
-          "sort_by": "eo:cloud_cover"
-        },
+        "name": "rslearn.data_sources.planetary_computer.Sentinel2",
+        "sort_by": "eo:cloud_cover",
         "time_offset": "90d"
       },
       "type": "raster"
@@ -542,14 +520,12 @@
         }
       ],
       "data_source": {
-        "class_path": "rslearn.data_sources.planetary_computer.Sentinel2",
+        "cache_dir": "cache/planetary_computer",
         "duration": "30d",
+        "harmonize": true,
         "ingest": false,
-        "init_args": {
-          "cache_dir": "cache/planetary_computer",
-          "harmonize": true,
-          "sort_by": "eo:cloud_cover"
-        },
+        "name": "rslearn.data_sources.planetary_computer.Sentinel2",
+        "sort_by": "eo:cloud_cover",
         "time_offset": "120d"
       },
       "type": "raster"
@@ -588,14 +564,12 @@
         }
       ],
       "data_source": {
-        "class_path": "rslearn.data_sources.planetary_computer.Sentinel2",
+        "cache_dir": "cache/planetary_computer",
         "duration": "30d",
+        "harmonize": true,
         "ingest": false,
-        "init_args": {
-          "cache_dir": "cache/planetary_computer",
-          "harmonize": true,
-          "sort_by": "eo:cloud_cover"
-        },
+        "name": "rslearn.data_sources.planetary_computer.Sentinel2",
+        "sort_by": "eo:cloud_cover",
         "time_offset": "150d"
       },
       "type": "raster"
